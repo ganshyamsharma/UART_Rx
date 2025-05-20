@@ -3,7 +3,8 @@ module uart_rx #(parameter CLK_PER_BIT)		//i_clk divided by baud rate
 (
 	input i_clk, 
 	input i_serial_data,
-	output reg o_dv, o_rx_error = 0,
+	output reg o_rx_error = 0,
+	output o_dv = 0,
 	output [7:0] o_rx_byte
 );
 	//
@@ -107,6 +108,6 @@ module uart_rx #(parameter CLK_PER_BIT)		//i_clk divided by baud rate
 	end
 	//
 	//
-	assign o_dv = (st == s_final);
+	assign o_dv = (r_state == s_final);
 	assign o_rx_byte = r_rx_byte;
 endmodule
