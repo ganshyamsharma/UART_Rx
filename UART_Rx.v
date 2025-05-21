@@ -1,11 +1,10 @@
-
-module uart_rx #(parameter CLK_PER_BIT)		//i_clk divided by baud rate
+module uart_rx #(parameter CLK_PER_BIT = 10417)		//i_clk divided by baud rate
 (
 	input i_clk, 
 	input i_serial_data,
 	output reg o_rx_error = 0,
-	output o_dv = 0,
-	output [7:0] o_rx_byte
+	output o_dv,
+	output reg [7:0] o_rx_byte
 );
 	//
 	//
@@ -41,14 +40,21 @@ module uart_rx #(parameter CLK_PER_BIT)		//i_clk divided by baud rate
 				begin
 					r_next_state = s_idle;
 				end
+			default: r_next_state = s_idle;
 		endcase
 	end
 	//
 	//
 	reg [7:0] r_rx_byte = 0;
+	reg r_dv;
+	reg r_stop_state_correct = 0;      // for correcting the state transition from data transmission to stop bit at mid of last data bit
 	always @(posedge i_clk) begin
 		r_state <= r_next_state;
 		case(r_state)
+		    s_idle:
+		        begin
+		            r_dv <= 0;
+		        end
 			s_rx_start: 
 				begin
 					if(r_clk_counter == CLK_PER_BIT)
@@ -66,12 +72,24 @@ module uart_rx #(parameter CLK_PER_BIT)		//i_clk divided by baud rate
 									r_clk_counter <= 0;
 									r_bit_counter <= r_bit_counter + 1;
 								end
-							else if(r_clk_counter == CLK_PER_BIT)
+							else if((r_clk_counter == CLK_PER_BIT) & (r_bit_counter < 7))
 								begin
 									r_rx_byte[r_bit_counter] <= i_serial_data;
 									r_clk_counter <= 0;
 									r_bit_counter <= r_bit_counter + 1;
 								end
+							else if((r_clk_counter == (CLK_PER_BIT)) & (r_bit_counter == 7))
+							     begin
+							         r_clk_counter <= 0;
+							         r_rx_byte[r_bit_counter] <= i_serial_data;
+							         r_stop_state_correct <= 1;
+							     end
+							else if((r_stop_state_correct == 1) & (r_bit_counter == 7) & (r_clk_counter == CLK_PER_BIT/2))
+							     begin
+							         r_stop_state_correct <= 0;
+							         r_bit_counter <= r_bit_counter + 1;
+							         r_clk_counter <= 0;
+							     end
 							else
 								begin
 									r_clk_counter <= r_clk_counter + 1;
@@ -103,11 +121,14 @@ module uart_rx #(parameter CLK_PER_BIT)		//i_clk divided by baud rate
 			s_final:
 				begin
 					o_rx_error <= 1'b0;
+					r_dv <= 1'b1;
 				end
 		endcase
 	end
 	//
 	//
-	assign o_dv = (r_state == s_final);
-	assign o_rx_byte = r_rx_byte;
+	assign o_dv = r_dv;
+	always @(posedge r_dv) begin
+	   o_rx_byte <= r_rx_byte;
+	end
 endmodule
